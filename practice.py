@@ -44,14 +44,21 @@ test_org = pd.read_csv('test.csv')
 train_copy=train_org.copy()
 test_copy=test_org.copy()
 
-train=train_copy.drop(['Alley','FireplaceQu','PoolQC','Fence','MiscFeature'],axis=1)
-test=test_copy.drop(['Alley','FireplaceQu','PoolQC','Fence','MiscFeature'],axis=1)
+train_pre=train_copy.drop(['Id','Alley','FireplaceQu','PoolQC','Fence','MiscFeature'],axis=1)
+test_pre=test_copy.drop(['Id','Alley','FireplaceQu','PoolQC','Fence','MiscFeature'],axis=1)
 
-train_new=DataFrameImputer().fit_transform(train)
-test_new=DataFrameImputer().fit_transform(test)
+train=DataFrameImputer().fit_transform(train_pre)
+test=DataFrameImputer().fit_transform(test_pre)
 
+train['GarageYrBlt']=train['GarageYrBlt'].astype(int)
+test['GarageYrBlt']=test['GarageYrBlt'].astype(int)
+train=train.rename(columns={"1stFlrSF":"firstFlrSf","2ndFlrSF": "secondFlrSf","3SsnPorch":"threeSsnPorch"}, errors="raise")
+test=test.rename(columns={"1stFlrSF":"firstFlrSf","2ndFlrSF": "secondFlrSf","3SsnPorch":"threeSsnPorch"}, errors="raise")
 #
 # print(train_new['MasVnrType'].isnull().any())
+# print(train.columns)
+# train['GarageYrBlt'].to_csv('garageyrblt1.csv')
+
 
 # cols_with_missing = [col for col in train.columns
 #                                  if train[col].isnull().any()]
@@ -64,11 +71,20 @@ test_new=DataFrameImputer().fit_transform(test)
 # print(train_with_imputed_values.isnull().sum())
 
 # plt.figure(figsize=[300,300])
-# sns.heatmap(train_org.corr(),annot=True)
+# sns.heatmap(train.corr(),annot=True)
 # plt.show()
 
 # +
 
+###### DONE WITH MISSING VALUES #####
+
+
+##  Observing why some coefficient are zero ##
+
+# print(train['OverallQual'
+# ])
+
+# train['OverallQual'].to_csv('overallqual.csv')
 # reg=ols('SalePrice~  C(MSSubClass)',data=train_org)
 # reg=ols('SalePrice~  MSZoning',data=train_org)
 # reg=ols('SalePrice~ C(MSSubClass)+MSZoning+LotFrontage+LotArea+Street \
@@ -82,6 +98,15 @@ test_new=DataFrameImputer().fit_transform(test)
 # +GarageArea+GarageQual+GarageCond+PavedDrive+WoodDeckSF+OpenPorchSF+EnclosedPorch+3SsnPorch+ScreenPorch+PoolArea+PoolQC+Fence+MiscFeature+MiscVal \
 # +C(MoSold)+C(YrSold)+SaleType+SaleCondition',data=train_org)
 
-# reg=ols('SalePrice~ C(MSSubClass)+MSZoning+LotFrontage+LotArea+Street+Alley+LotShape+LandContour+Utilities+LotConfig+LandSlope+Neighborhood+Condition1+Condition2+BldgType+HouseStyle+C(OverallQual)+C(OverallCond)+C(YearBuilt)+C(YearRemodAdd)+RoofStyle+RoofMatl+Exterior1st+Exterior2nd+MasVnrType+MasVnrArea+ExterQual+ExterCond',data=train_org)
+reg=ols('SalePrice~ C(MSSubClass)+MSZoning+LotFrontage+LotArea+Street+LotShape+LandContour+Utilities+LotConfig+LandSlope+Neighborhood+Condition1+Condition2+BldgType+HouseStyle+C(OverallQual)+C(OverallCond)+C(YearBuilt)+C(YearRemodAdd)+RoofStyle+RoofMatl+Exterior1st+Exterior2nd+MasVnrType+MasVnrArea+ExterQual+ExterCond+Foundation+BsmtQual+BsmtCond+BsmtExposure+BsmtFinType1+BsmtFinSF1+BsmtFinType2+BsmtFinSF2+BsmtUnfSF+TotalBsmtSF+Heating+HeatingQC+CentralAir+Electrical+firstFlrSf+secondFlrSf+LowQualFinSF+GrLivArea+C(BsmtFullBath)+C(BsmtHalfBath)+C(FullBath)+C(HalfBath)+C(BedroomAbvGr)+C(KitchenAbvGr)+KitchenQual+C(TotRmsAbvGrd)+Functional+C(Fireplaces)+GarageType+C(GarageYrBlt)+GarageFinish+C(GarageCars)+GarageArea+GarageQual+GarageCond+PavedDrive+WoodDeckSF+OpenPorchSF+EnclosedPorch+threeSsnPorch+ScreenPorch+PoolArea+MiscVal+C(MoSold)+C(YrSold)+SaleType+SaleCondition',data=train)
+reg_result=reg.fit()
+print(reg_result.summary())
+
+# reg=ols('SalePrice~ C(OverallQual)',data=train)
 # reg_result=reg.fit()
 # print(reg_result.summary())
+
+
+
+
+#####                     RESIDUES DIAGNOSTIC           ###
