@@ -1,0 +1,351 @@
+---
+title: "HousePredict"
+author: "Sujal Bhavsar"
+date: "12/12/2019"
+output: html_document
+---
+
+```{r}
+
+train<-read.csv('trainsujal.csv')
+test<-read.csv('testsujal.csv')
+train<- subset(train,select=-X)
+test<- subset(test,select=-X)
+ncol(train)
+ncol(test)
+
+combi <- rbind(subset(train,select=-logSalePrice),test)
+combi
+nrow(combi)
+
+
+combi$MSSubClass <- as.factor(combi$MSSubClass)
+combi$OverallQual <- as.factor(combi$OverallQual)
+combi$YearBuilt <- as.factor(combi$YearBuilt)
+combi$YearRemodAdd <- as.factor(combi$YearRemodAdd)
+combi$BsmtFullBath <- as.factor(combi$BsmtFullBath)
+combi$BsmtHalfBath <- as.factor(combi$BsmtHalfBath)
+combi$BedroomAbvGr <- as.factor(combi$BedroomAbvGr)
+combi$KitchenAbvGr <- as.factor(combi$KitchenAbvGr)
+combi$TotRmsAbvGrd <- as.factor(combi$TotRmsAbvGrd)
+combi$Fireplaces <- as.factor(combi$Fireplaces)
+combi$GarageYrBlt <- as.factor(combi$GarageYrBlt)
+combi$GarageCars <- as.factor(combi$GarageCars)
+combi$MoSold <- as.factor(combi$MoSold)
+combi$YrSold <- as.factor(combi$YrSold)
+```
+
+Training and testing set are combined to dealth with some of the parameters transformation. Such as, numerical categorical variables are passed with as.factor. 
+
+After required transformation, the combined data is agains split into training and testing data based on their sample size.
+
+
+```{r}
+
+
+train_nw<-combi[1:1457,]
+test_nw<- combi[1458:2916,]
+train_nw['logSalePrice']<-train['logSalePrice']
+
+attach(train_nw)
+attach(test_nw)
+```
+
+Full Model check in R
+
+```{r}
+fit1<- lm(logSalePrice~.,data=train_nw)
+summary(fit1)
+```
+
+```{r}
+r <- rstudent(fit1)
+par(mfrow=c(1,3))
+plot(fit1$fitted, r, main="studentized resids v. fitted")
+hist(r)
+qqnorm(r); abline(0,1)
+```
+
+Some levels of certain parameters are different in testing and training set. Also from the full model summary, it reveals that those column had no statistical significance. Hence, I found it appropriate to drop that out for making prediction on testing data.
+
+```{r}
+## Some of the levels are missing from testing set. also from the summary it reveals that those column had no statistical significance
+
+train_nw1<- subset(train_nw,select=-c(MSSubClass,YearBuilt,BsmtFullBath,BsmtHalfBath,TotRmsAbvGrd,Fireplaces, GarageYrBlt, GarageCars))
+test_nw1<- subset(test_nw,select=-c(MSSubClass,YearBuilt,BsmtFullBath,BsmtHalfBath, TotRmsAbvGrd, Fireplaces, GarageYrBlt, GarageCars))
+fit2<- lm(logSalePrice~.,data=train_nw1)
+summary(fit2)
+r <- rstudent(fit2)
+par(mfrow=c(1,3))
+plot(fit2$fitted, r, main="studentized resids v. fitted")
+hist(r)
+qqnorm(r); abline(0,1)
+
+p1<-predict(fit2,test_nw1,interval='prediction')
+```
+
+Adjusted R-squred for fit2 is 0.9377
+
+Residual diagnositc are quite similar to fit1. Nothing much concerning.
+
+Got RMSE value of 0.13619 on the testing set from fit 2
+
+```{r}
+## use BIC with step to reduce the model
+
+null<-lm(logSalePrice~1,data=train_nw)
+full<-lm(logSalePrice~.,data=train_nw)
+n <- nrow(train_nw)
+fit3<- step(null,scope=formula(full),direction='forward',k=log(n),trace=0)
+summary(fit3)
+
+
+# model probabilities
+
+BIC<- data.frame(fit2=extractAIC(fit2,k=log(n))[2],fit3=extractAIC(fit3,k=log(n))[2])
+eBIC<-exp(-.5*(BIC-min(BIC)))
+round(probs<-eBIC/sum(eBIC),4)
+```
+
+Obtained reduced model through step
+
+Got an adjustd R-squred of  0.9271 
+
+It is clear from model probability that the probability of the fit3 to be better than fit 2 is 100%.
+
+
+```{r}
+test_nw2<- subset(test_nw1,select=c(OverallQual, GrLivArea, Neighborhood,TotalBsmtSF, OverallCond, BsmtUnfSF, GarageArea,SaleCondition ,CentralAir , LotArea , Foundation , MSZoning , GarageFinish ,KitchenQual, ScreenPorch, Functional, BsmtQual, HalfBath ,firstFlrSf , secondFlrSf , BsmtExposure , KitchenAbvGr ,FullBath))
+
+p2<-predict(fit3,test_nw2,interval='prediction')
+#write.csv(exp(p2[,1]),'p2.csv')
+```
+
+Got RMSE value of 0.12681 on testing data from fit3
+
+```{r}
+# invovling interaction
+
+fit4<- step(fit3, scope=~.+.^2, direction="forward", k=log(n), trace=0)
+summary(fit4)
+
+#CentralAir:firstFlrSf + OverallCond:BsmtExposure + TotalBsmtSF:MSZoning + firstFlrSf:secondFlrSf + BsmtUnfSF:ScreenPorch + GarageArea:KitchenAbvGr,
+# included theses interaction
+
+# Model Probabilities
+BIC<- data.frame(fit3=extractAIC(fit3,k=log(n))[2],fit4=extractAIC(fit4,k=log(n))[2])
+eBIC<-exp(-.5*(BIC-min(BIC)))
+round(probs<-eBIC/sum(eBIC),4)
+
+# again fit4 seems promising let us check its residual diagnostic
+
+r <- rstudent(fit4)
+par(mfrow=c(1,3))
+plot(fit1$fitted, r, main="studentized resids v. fitted")
+hist(r)
+qqnorm(r); abline(0,1)
+# NOthing much concerning on residual diagnostic
+
+p4<-predict(fit4,test_nw2,interval='prediction')
+#write.csv(exp(p4[,1]),'p4.csv')
+
+
+```
+
+Interaction with step was checked considering fit3 as a base model. However, fit4 shows no improvements with consideration on interaction. It was found that non of the interaction except few is statistically significant.
+
+Obtained R-squared:  0.9327 
+
+It is seen that fit4 is better than fit3 from model probability. However, its performance on the testing set is not better than fit3.
+
+Residual diagnosis reveals nothing to be concern about
+
+Got RMSE of  0.13815 with fit 4
+
+```{r}
+bb<-read.csv('xx.csv')
+B<-199
+beta <- matrix(0,296, nrow=B)
+colnames(beta)<-bb[,2]
+# train_nw3<-as.matrix(train_nw1)
+# fit5 <- lars(train_nw3[,1:62], train_nw3[,63], type="lasso")
+# lassofit
+
+for(b in 1:B) {
+  index <- sample(1:nrow(train_nw1), nrow(train_nw1), replace=TRUE)
+  XYT <- data.frame(SalePrice=train_nw1[index,63], train_nw1[index,1:62])
+  null <- lm(SalePrice~1, data=XYT)
+  full <- lm(SalePrice~., data=XYT)
+  fwdbak <- step(null, scope=formula(full), trace=0, k=log(nrow(XYT)))
+  beta[b,which(colnames(beta) %in% names(coef(fwdbak)[-1]))] <- coef(fwdbak)[-1]
+}
+
+par(mfrow=c(1,1))
+boxplot(beta, xaxt="n", ylab="beta", main="Sampling Distribution of Main Effects")
+axis(1, at=1:ncol(beta), labels=colnames(beta))
+
+
+##IT is very difficult to observe this variation 
+
+ps <- apply(beta, 2, function(x) { mean(x != 0)} )
+ps
+#overqual selected 100% of the time
+```
+
+For storing the values of particular parameters in beta matrix, I need to have all dummy variables assigned as a column name to my beta matrix. To handle this, I have made a separate csv file that contains the name of all parameters including dummies. colnames for beta
+
+Since there are around ~300 parameters after including dummy one, It is extremely difficult to observe the boxplot of betas.
+
+But after looking at the boxplot, it felt that 25% of the betas are centered around zero. 
+
+It was observed that ‘Overqual’ parameter was selected 100% of the time. 
+
+```{r}
+combi_1 <- rbind(subset(train_nw1,select=-logSalePrice),test_nw1)
+
+# converting to numeric categoy
+
+mapping = c('Ex'=5,'Gd'=4,'TA'=3,'Fa'=2,'Po'=1,'None'=0)
+ordinal_var = c('BsmtQual', 'BsmtCond', 'GarageQual', 'GarageCond', 'ExterQual', 'ExterCond', 'HeatingQC', 'KitchenQual')
+combi_2<-combi_1
+for (v in ordinal_var){
+  combi_2[v] = c('Ex'=5,'Gd'=4,'TA'=3,'Fa'=2,'Po'=1,'None'=0)[combi_1[v][[1]]]
+}
+combi_2['BsmtFinType1'] = c('GLQ'=6,'ALQ'=5,'BLQ'=4,'Rec'=3,'LwQ'=2,'Unf'=1,'None'=0)[combi_1['BsmtFinType1'][[1]]]
+combi_2['BsmtFinType2'] = c('GLQ'=6,'ALQ'=5,'BLQ'=4,'Rec'=3,'LwQ'=2,'Unf'=1,'None'=0)[combi_1['BsmtFinType2'][[1]]]
+combi_2['Functional'] = c('Typ'=7,'Min1'=6,'Min2'=5,'Mod'=4,'Maj1'=3,'Maj2'=2,'Sev'=1,'Sal'=0)[combi_1['Functional'][[1]]]
+combi_2['BsmtExposure'] = c('Gd'=4,'Av'=3,'Mn'=2,'No'=1,'None'=0)[combi_1['BsmtExposure'][[1]]]
+combi_2['GarageFinish'] = c('None'=0, 'Unf'=1, 'RFn'=2, 'Fin'=3)[combi_1['GarageFinish'][[1]]]
+combi_2['LandSlope'] = c('Sev'=1, 'Mod'=2, 'Gtl'=3)[combi_1['LandSlope'][[1]]]
+combi_2['LotShape'] = c('IR3'=1, 'IR2'=2, 'IR1'=3, 'Reg'=4)[combi_1['LotShape'][[1]]]
+combi_2['PavedDrive'] = c('N'=1, 'P'=2, 'Y'=3)[combi_1['PavedDrive'][[1]]]
+combi_2['CentralAir'] = c('N'=0, 'Y'=1)[combi_1['CentralAir'][[1]]]
+
+combi_2[combi_2 == 'None'] = 0
+
+```
+
+Converted all non-numerical category to a numerical one (working with combined testing and training dataset). Some of the parameters which were not possible to make numeric are extracted as a dummy variable.
+
+```{r}
+
+library(magrittr) # needs to be run every time you start R and want to use %>%
+library(dplyr) 
+# 
+# # dummy variables
+combi_2 = combi_2 %>%
+  as.data.frame() %>%
+  fastDummies::dummy_cols() %>%
+  .[colnames(.)[sapply(., class) != "character"]]
+
+
+
+
+for (v in colnames(combi_2)){
+  x = combi_2[v][[1]]
+  combi_2[v] = ifelse(is.na(as.numeric(x)), x, as.numeric(x))
+}
+
+combi_2[is.na(combi_2)]<-0
+
+# Making standardized for lasso
+
+for (v in colnames(combi_2)){
+  combi_2[v] = (combi_2[v] - mean(combi_2[v][[1]])) / sd(combi_2[v][[1]]) 
+}
+
+
+
+combi_2[is.na(combi_2)]<-0
+
+
+
+
+train_nw4<-combi_2[1:1457,]  #(this is only parameters)
+test_nw4<- combi_2[1458:2916,]
+
+#Lasso start for combi2
+library(glmnet)
+cv.lasso1=cv.glmnet(as.matrix(train_nw4),train_nw1[,63],alpha=1,family='gaussian')
+plot(cv.lasso1)
+sprintf('Best lambda for LASSO: %f.', cv.lasso1$lambda.min)
+
+coef_lasso = coef(cv.lasso1, cv.lasso1$lambda.min) %>% 
+  as.matrix() %>% 
+  as.data.frame()
+coef_lasso$abs = abs(coef_lasso[,1])
+
+coef_lasso$abs %>% 
+  order(coef_lasso$abs, decreasing = TRUE) %>% 
+  coef_lasso[., ] %>% 
+  head(20) %>% 
+  dplyr::select(-'abs')
+
+
+#FInal model with lasso lambda min
+lasso.model1 = glmnet(as.matrix(train_nw4),train_nw1[,63], family = "gaussian", lambda = cv.lasso1$lambda.min)
+
+lasso_pre_tr = lasso.model1 %>% predict(newx = as.matrix(train_nw4))
+sprintf('Training RMSE of LASSO: %f.', sqrt(mean((train_nw1[,63] - lasso_pre_tr)^2))) # training RMSE
+
+lasso_pre_te = lasso.model1 %>% predict(newx = as.matrix(test_nw4))
+#write.csv(exp(lasso_pre_te),'p5.csv')
+```
+
+Min. value so λ is selected using the cv.glmnet function. And lasso model is trained using that λ value.
+
+Best lambda for LASSO: 0.003133
+
+Training RMSE of LASSO: 0.10139
+
+Got RMSE on testing set: 0.12740 with lasso 
+
+```{r}
+
+#Ridge regression
+
+
+
+cv.ridge=cv.glmnet(as.matrix(train_nw4),train_nw1[,63],alpha=0,family='gaussian')
+plot(cv.ridge)
+sprintf('Best lambda for LASSO: %f.', cv.ridge$lambda.min)
+
+coef_ridge = coef(cv.ridge, cv.ridge$lambda.min) %>% 
+  as.matrix() %>% 
+  as.data.frame()
+coef_ridge$abs = abs(coef_ridge[,1])
+
+coef_ridge$abs %>% 
+  order(coef_ridge$abs, decreasing = TRUE) %>% 
+  coef_ridge[., ] %>% 
+  head(20) %>% 
+  dplyr::select(-'abs')
+
+
+#FInal model with lasso lambda min
+ridge.model = glmnet(as.matrix(train_nw4),train_nw1[,63],alpha = 0, family = "gaussian", lambda = cv.ridge$lambda.min)
+
+ridge_pre_tr = ridge.model %>% predict(newx = as.matrix(train_nw4))
+sprintf('Training RMSE of LASSO: %f.', sqrt(mean((train_nw1[,63] - ridge_pre_tr)^2))) # training RMSE
+
+ridge_pre_te = ridge.model %>% predict(newx = as.matrix(test_nw4))
+#write.csv(exp(ridge_pre_te),'p6.csv')
+
+
+```
+
+Best lambda for Ridge: 0.075820
+
+
+Got RMSE on testing set with Ridge: 0.13110
+
+```{r}
+### BIC with interaction
+null1<-lm(logSalePrice~1,data=train_nw)
+full1<-lm(logSalePrice~OverallQual + GrLivArea*TotRmsAbvGrd + Neighborhood + TotalBsmtSF + OverallCond + BsmtUnfSF + GarageArea + SaleCondition + CentralAir + LotArea + Foundation + MSZoning + GarageFinish + KitchenQual + ScreenPorch + Functional + BsmtQual + HalfBath + firstFlrSf + secondFlrSf + BsmtExposure + KitchenAbvGr + FullBath+firstFlrSf*TotalBsmtSF+GarageArea*GarageCars,data=train_nw)
+n <- nrow(train_nw)
+fit7<- step(null1,scope=formula(full1),direction='forward',k=log(n),trace=0)
+summary(fit7)
+# seens like interaction is of no use
+
+```
